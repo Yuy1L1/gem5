@@ -177,7 +177,7 @@ Fault
 
     %(fault_code)s;
 
-    const size_t micro_vlmax = vtype_VLMAX(machInst.vtype8, vlen, true);
+    const size_t micro_vlmax = vlen / width_EEW(machInst.width);
     const size_t micro_elems = vlen / width_EEW(machInst.width);
 
     if (fault != NoFault)
@@ -257,7 +257,7 @@ Fault
         memcpy(Mem.as<uint8_t>(), pkt->getPtr<uint8_t>(), pkt->getSize());
     }
 
-    const size_t micro_vlmax = vtype_VLMAX(machInst.vtype8, vlen, true);
+    const size_t micro_vlmax = vlen / width_EEW(machInst.width);
     const size_t micro_elems = vlen / width_EEW(machInst.width);
 
     size_t ei;
@@ -374,7 +374,7 @@ Fault
     %(set_vlen)s;
     %(ea_code)s;
 
-    const size_t micro_vlmax = vtype_VLMAX(machInst.vtype8, vlen, true);
+    const size_t micro_vlmax = vlen / width_EEW(machInst.width);
     const size_t eewb = width_EEW(machInst.width) / 8;
     const size_t mem_size = eewb * microVl;
     std::vector<bool> byte_enable(mem_size, false);
@@ -425,7 +425,7 @@ Fault
     %(set_vlen)s;
     %(ea_code)s;
 
-    const size_t micro_vlmax = vtype_VLMAX(machInst.vtype8, vlen, true);
+    const size_t micro_vlmax = vlen / width_EEW(machInst.width);
     const size_t eewb = width_EEW(machInst.width) / 8;
     const size_t mem_size = eewb * microVl;
     std::vector<bool> byte_enable(mem_size, false);
