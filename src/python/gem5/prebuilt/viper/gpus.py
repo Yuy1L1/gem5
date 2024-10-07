@@ -57,6 +57,8 @@ from m5.objects import (
     VegaGPUTLB,
     VegaTLBCoalescer,
     BaseXBar,
+    RegisterFileCache,
+    AddrRange,
 )
 
 
@@ -85,8 +87,7 @@ class ViperGPU(Shader):
         self.impl_kern_launch_acq = True
         self.impl_kern_end_rel = False
 
-        self.CUs = [ViperCU(device) for _ in range(num_cu)]
-
+        self.CUs = [ViperCU(device, self.n_wf) for _ in range(num_cu)]
         self._create_tlbs(device)
 
         device.trace_file = mmio_trace
@@ -95,7 +96,7 @@ class ViperGPU(Shader):
         # This arbitrary address is something in the X86 I/O hole
         hsapp_gpu_map_paddr = 0xE00000000
         self.dispatcher = GPUDispatcher()
-        self.gpu_cmd_processor = GPUCommandProcessor(
+        self.gpu_cmd_proc = GPUCommandProcessor(
             hsapp=HSAPacketProcessor(
                 pioAddr=hsapp_gpu_map_paddr,
                 numHWQueues=10,
@@ -104,10 +105,10 @@ class ViperGPU(Shader):
             dispatcher=self.dispatcher,
             walker=VegaPagetableWalker(),
         )
-        self._dma_ports.append(self.gpu_cmd_processor.hsapp.dma)
-        self._dma_ports.append(self.gpu_cmd_processor.hsapp.walker.port)
-        self._dma_ports.append(self.gpu_cmd_processor.walker.port)
-        self._dma_ports.append(self.gpu_cmd_processor.dma)
+        self._dma_ports.append(self.gpu_cmd_proc.hsapp.dma)
+        self._dma_ports.append(self.gpu_cmd_proc.hsapp.walker.port)
+        self._dma_ports.append(self.gpu_cmd_proc.walker.port)
+        self._dma_ports.append(self.gpu_cmd_proc.dma)
 
         self.system_hub = AMDGPUSystemHub()
         self._dma_ports.append(self.system_hub.dma)
@@ -116,8 +117,8 @@ class ViperGPU(Shader):
 
     def set_cpu_pointer(self, cpu: BaseCPU):
         """Set the CPU pointer for the CUs."""
-        for cu in self.CUs:
-            cu.cpu_pointer = cpu
+        self.cpu_pointer = cpu
+        # print(self.cpu_pointer)
 
     def _setup_device(self, device: AMDGPUDevice):
         """Set the device type info on the device connected to the south
@@ -125,13 +126,17 @@ class ViperGPU(Shader):
         """
         self._device = device
 
-        device.cp = self.gpu_cmd_processor
+        device.cp = self.gpu_cmd_proc
         device.device_ih = AMDGPUInterruptHandler()
         self._dma_ports.append(device.device_ih.dma)
 
         # Setup PM4 packet processor
-        device.pm4_pkt_proc = PM4PacketProcessor()
-        self._dma_ports.append(device.pm4_pkt_proc.dma)
+        device.pm4_pkt_procs = []
+        device.pm4_pkt_procs.append(
+            PM4PacketProcessor(
+                ip_id=0, mmio_range=AddrRange(start=0xC000, end=0xD000)
+            )
+        )
 
         # GPU data path
         device.memory_manager = AMDGPUMemoryManager()
@@ -208,21 +213,47 @@ class ViperGPU(Shader):
 
         self._dma_ports.append(self.l3_tlb.walker.port)
 
+    # def connect_iobus(self, iobus: BaseXBar):
+    #     """Connect the GPU devices to the IO bus."""
+    #     self.gpu_cmd_proc.pio = iobus.mem_side_ports
+    #     self.gpu_cmd_proc.hsapp.pio = iobus.mem_side_ports
+    #     self.system_hub.pio = iobus.mem_side_ports
+    #     self._device.pio = iobus.mem_side_ports
+    #     for sdma in self._device.sdmas:
+    #         sdma.pio = iobus.mem_side_ports
+    #     self._device.device_ih.pio = iobus.mem_side_ports
+    #     for pm4_proc in self._device.pm4_pkt_procs:
+    #         pm4_proc.pio = iobus.mem_side_ports
     def connect_iobus(self, iobus: BaseXBar):
         """Connect the GPU devices to the IO bus."""
-        self.gpu_cmd_processor.pio = iobus.mem_side_ports
-        self.gpu_cmd_processor.hsapp.pio = iobus.mem_side_ports
-        self.system_hub.pio = iobus.mem_side_ports
-        self._device.pio = iobus.mem_side_ports
+        ports = iter(iobus.mem_side_ports)
+        self.gpu_cmd_proc.pio = next(ports)
+        print(f"1Connecting {self.gpu_cmd_proc.pio} to {next(ports)}")
+
+        self.gpu_cmd_proc.hsapp.pio = next(ports)
+        print(f"2Connecting {self.gpu_cmd_proc.pio} to {next(ports)}")
+
+        self.system_hub.pio = next(ports)
+        print(f"3Connecting {self.gpu_cmd_proc.pio} to {next(ports)}")
+
+        self._device.pio = next(ports)
+        print(f"4Connecting {self.gpu_cmd_proc.pio} to {next(ports)}")
+
         for sdma in self._device.sdmas:
-            sdma.pio = iobus.mem_side_ports
-        self._device.device_ih.pio = iobus.mem_side_ports
-        self._device.pm4_pkt_proc.pio = iobus.mem_side_ports
+            sdma.pio = next(ports)
+            print(f"5Connecting {self.gpu_cmd_proc.pio} to {next(ports)}")
+
+        self._device.device_ih.pio = next(ports)
+        print(f"6Connecting {self.gpu_cmd_proc.pio} to {next(ports)}")
+
+        for pm4_proc in self._device.pm4_pkt_procs:
+            pm4_proc.pio = next(ports)
+            print(f"7Connecting {self.gpu_cmd_proc.pio} to {next(ports)}")
 
 
 class MI100GPU(ViperGPU):
     def setup_device(self, device: AMDGPUDevice):
-        super().setup_device(device)
+        super()._setup_device(device)
         device.DeviceID = 0x738C
         device.SubsystemVendorID = 0x1002
         device.SubsystemID = 0x0C34
@@ -244,6 +275,52 @@ class MI100GPU(ViperGPU):
         sdma_sizes = [0x1000] * 8
 
         device.sdmas = self._create_sdmas(num_sdmas, sdma_bases, sdma_sizes)
+        # print("hahhaa", device.sdmas)
+
+
+class MI200GPU(ViperGPU):
+    def setup_device(self, device: AMDGPUDevice):
+        super().setup_device(device)
+        device.DeviceID = 0x740F
+        device.SubsystemVendorID = 0x1002
+        device.SubsystemID = 0x0C34
+
+        # comes from gem5/configs/examples/gpufs/system/system.py
+        num_sdmas = 5
+        sdma_bases = [
+            0x4980,
+            0x6180,
+            0x78000,
+            0x79000,
+            0x7A000,
+        ]
+        sdma_sizes = [0x1000] * 5
+
+        device.sdmas = self._create_sdmas(num_sdmas, sdma_bases, sdma_sizes)
+
+    # TODO
+
+
+class MI300GPU(ViperGPU):
+    def setup_device(self, device: AMDGPUDevice):
+        super().setup_device(device)
+        # these comes from gem5/configs/example/gpufs/system/amdgpu.py
+        device.DeviceID = 0x740F
+        device.SubsystemVendorID = 0x1002
+        device.SubsystemID = 0x0C34
+
+        # these comes from gem5/configs/examples/gpufs/system/system.py
+        num_sdmas = 5
+        sdma_bases = [
+            0x4980,
+            0x6180,
+            0x78000,
+            0x79000,
+            0x7A000,
+        ]
+        sdma_sizes = [0x1000] * 5
+
+        device.sdmas = self._create_sdmas(num_sdmas, sdma_bases, sdma_sizes)
 
 
 class Vega10GPU(ViperGPU):
@@ -262,7 +339,6 @@ class Vega10GPU(ViperGPU):
 
 
 class ViperCU(ComputeUnit):
-
     _next_id = 0
 
     @classmethod
@@ -270,14 +346,14 @@ class ViperCU(ComputeUnit):
         cls._next_id += 1
         return cls._next_id - 1
 
-    def __init__(self, device: AMDGPUDevice):
+    def __init__(self, device: AMDGPUDevice, n_wf):
         super().__init__()
         self._device = device
 
         self.cu_id = self._get_next_id()
         self.localDataStore = LdsState()
         self.num_SIMDs = 4
-        self.n_wf = 8
+        self.n_wf = n_wf
 
         self.wavefronts = [
             Wavefront(simdId=j, wf_slot_id=k)
@@ -303,9 +379,13 @@ class ViperCU(ComputeUnit):
         )
 
         self.ldsPort = self.ldsBus.cpu_side_port
+        self.ldsBus.mem_side_port = self.localDataStore.cuPort
         self.ldsPort.mem_side_port = self.localDataStore.cuPort
 
         self._create_tlbs()
+        self.register_file_cache = [
+            RegisterFileCache(simd_id=i) for i in range(self.num_SIMDs)
+        ]
 
     def _create_tlbs(self):
         self.l1_tlb = VegaGPUTLB(

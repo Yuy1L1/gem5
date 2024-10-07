@@ -24,29 +24,42 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from ...components.cachehierarchies.ruby.abstract_ruby_cache_hierarchy import (
+from gem5.components.cachehierarchies.ruby.abstract_ruby_cache_hierarchy import (
     AbstractRubyCacheHierarchy,
 )
-from ...components.cachehierarchies.abstract_cache_hierarchy import (
+from gem5.components.cachehierarchies.abstract_cache_hierarchy import (
     AbstractCacheHierarchy,
 )
-from ...components.boards.abstract_board import AbstractBoard
-from ...coherence_protocol import CoherenceProtocol
-from ...isas import ISA
-from ...utils.override import overrides
-from ...utils.requires import requires
+from gem5.components.boards.abstract_board import AbstractBoard
+from gem5.coherence_protocol import CoherenceProtocol
+from gem5.isas import ISA
+from gem5.utils.override import overrides
+from gem5.utils.requires import requires
 
-from .viper_network import DisjointSimplePt2Pt
+from viper_network import DisjointSimplePt2Pt
 
-from ...components.cachehierarchies.ruby.caches.viper.dma_controller import (
+from gem5.components.cachehierarchies.ruby.caches.viper.dma_controller import (
     ViperDMAController,
 )
-from ...components.cachehierarchies.ruby.caches.viper.directory import (
+from gem5.components.cachehierarchies.ruby.caches.viper.directory import (
     ViperDirectory,
 )
-from ...components.cachehierarchies.ruby.caches.viper.corepair_cache import (
+from gem5.components.cachehierarchies.ruby.caches.viper.corepair_cache import (
     CorePairCache,
 )
+
+from gem5.components.cachehierarchies.ruby.caches.viper.tcp import (
+    TCPCahe,
+)
+
+from gem5.components.cachehierarchies.ruby.caches.viper.sqc import (
+    SQCCahe,
+)
+
+from gem5.components.cachehierarchies.ruby.caches.viper.tcc import (
+    TCCCahe,
+)
+
 
 from m5.objects import (
     RubySystem,
@@ -110,12 +123,10 @@ class ViperCPUCacheHierarchy(AbstractRubyCacheHierarchy):
         self._l1i_assoc = l1i_assoc
         self._l2_size = l2_size
         self._l2_assoc = l2_assoc
-
         self.ruby_system = RubySystem()
 
     @overrides(AbstractCacheHierarchy)
     def incorporate_cache(self, board: AbstractBoard) -> None:
-
         requires(coherence_protocol_required=CoherenceProtocol.GPU_VIPER)
 
         # Ruby networks for CPU
@@ -132,8 +143,10 @@ class ViperCPUCacheHierarchy(AbstractRubyCacheHierarchy):
         # Create a single directory controller (Really the memory cntrl).
         self._controllers = []
 
-        num_cores = len(board.get_processor().get_cores())
-        for i in range((num_cores + 1) // 2):
+        num_cores = len(board.get_processor().get_cores())  # one core
+        for i in range(
+            (num_cores + 1) // 2
+        ):  # CorePair cache is for L1(1 Instr$ 2 Data$) and L2 cache both
             cache = CorePairCache(
                 l1d_size=self._l1d_size,
                 l1d_assoc=self._l1d_assoc,
@@ -189,14 +202,17 @@ class ViperCPUCacheHierarchy(AbstractRubyCacheHierarchy):
 
             self._controllers.append(cache)
 
-        # Create the CPU directory controllers
         self._directory_controllers = []
 
         # Automatically determine the numa bit. This can be changed to
         # increase the number of bytes to each memory channel before
         # going to the next channels
-        dir_bits = int(math.log(len(board.get_mem_ports()), 2))
-        block_size_bits = int(math.log(board.get_cache_line_size()))
+        # num of mem ports = 1
+        # cache line size = 64
+        dir_bits = int(math.log(len(board.get_mem_ports()), 2))  # log(1,2) = 0
+        block_size_bits = int(
+            math.log(board.get_cache_line_size())
+        )  # int(math.log(64)) = 4
 
         # Stuck here for now.  There doesn't seem to be a way to differentiate
         # between device mem ports and cpu mem ports
@@ -210,10 +226,17 @@ class ViperCPUCacheHierarchy(AbstractRubyCacheHierarchy):
             dir.ruby_system = self.ruby_system
             self._directory_controllers.append(dir)
 
-        # Create the DMA Controllers, if required.
+        # assign memory controllers to system
+        # cpu_abstract_mems = [mem_ctrl.dram for mem_ctrl in system.mem_ctrls]
+        # system.memories = cpu_abstract_mems
+
+        # gpu_abstract_mems = [mem_ctrl.dram for mem_ctrl in gpu_mem_ctrls]
+        # system.pc.south_bridge.gpu.memories = gpu_abstract_mems
+
         self._dma_controllers = []
         if board.has_dma_ports():
             dma_ports = board.get_dma_ports()
+            # get_dma_ports() -> 2 DMA ports
             for i, port in enumerate(dma_ports):
                 ctrl = ViperDMAController(
                     self.ruby_system.network_cpu, board.get_cache_line_size()
@@ -243,6 +266,69 @@ class ViperCPUCacheHierarchy(AbstractRubyCacheHierarchy):
         )
         self.ruby_system.network_cpu.setup_buffers()
 
+        # =================================================== Device Side ===================================================
+        #  thought process:
+        # 1. do not go deep, stay shallow, get the basics correct
+        # 1a. create a directory called copied and copy existing classes into it
+        # 2. go deep, try to wrap my head around multiple functions in GPU_VIPER.py
+
+        # looked at the implememtation of gpufs code and got the graph
+        # 4 tcps, 1 tcc, 1 sqc, 1 scalar and 1 gpu dir
+        # why put under the same class: shares the cache coherence protocl of GPU_VIPER
+        # to see GPU_VIPER.py, go to gem5/configs/ruby/GPU_VIPER.py
+        # and you will see both CPU and GPU cache components are included there
+
+        # 1. tcp
+        self._tcp_controllers = []
+        # get the number of transaction controller caches in GPU
+
+        # get the number of compute units
+        num_cu = 8
+        tcc_bits = int(math.log(num_tccs, 2))
+
+        for i in range(num_cu):
+            pass
+
+        # 2. sqc
+        self._sqc_controllers = []
+
+        # 3. scalar
+        self._scalar_controllers = []
+
+        # 4. tcc
+        self._tcc_controllers = []
+
+        # 5. gpu_dma
+        self._gpu_dma_controllers = []
+
+        # 6. gpu_directory import from ViperDir
+        self._gpu_dir_controllers = []
+        num_tccs = 1
+        gpu_dir_bits = int(math.log(num_tccs, 2))  # log(1,2) = 0
+        gpu_block_size_bits = int(
+            math.log(board.get_cache_line_size())
+        )  # int(math.log(64)) = 4
+
+        for addr_range, port in board.get_mem_ports():
+            dir = ViperDirectory(
+                self.ruby_system.network_cpu,
+                board.get_cache_line_size(),
+                addr_range,
+                port,
+            )
+            dir.ruby_system = self.ruby_system
+            self._directory_controllers.append(dir)
+
+        # ======================= coonect GPU controllers ==========================
+        self.ruby_system.network_gpu.connectGPU(
+            self._tcp_controllers
+            + self._sqc_controllers
+            + self._scalar_controllers
+            + self._tcc_controllers
+            + self._gpu_dma_controllers
+            + self._gpu_dir_controllers
+        )
+        self.ruby_system.network_gpu.setup_buffers()
         # Set up a proxy port for the system_port. Used for load binaries and
         # other functional-only things.
         self.ruby_system.sys_port_proxy = RubyPortProxy()

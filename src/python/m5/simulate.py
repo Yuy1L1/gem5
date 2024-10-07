@@ -137,9 +137,13 @@ def instantiate(ckpt_dir=None):
         obj.connectPorts()
 
     # Do a second pass to finish initializing the sim objects
+    print("hahahahah line 140")
     for obj in root.descendants():
+        # print("line 141 is here this the error")
+        # print("object is", obj)
         obj.init()
 
+    print("stupid python line 146")
     # Do a third pass to initialize statistics
     stats._bindStatHierarchy(root)
     root.regStats()

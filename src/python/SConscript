@@ -178,6 +178,14 @@ PySource('gem5.components.cachehierarchies.ruby.caches.mi_example',
     'dma_controller.py')
 PySource('gem5.components.cachehierarchies.ruby.caches.mi_example',
     'gem5/components/cachehierarchies/ruby/caches/mi_example/l1_cache.py')
+PySource('gem5.components.cachehierarchies.ruby.caches.viper',
+    'gem5/components/cachehierarchies/ruby/caches/viper/__init__.py')
+PySource('gem5.components.cachehierarchies.ruby.caches.viper',
+    'gem5/components/cachehierarchies/ruby/caches/viper/corepair_cache.py')
+PySource('gem5.components.cachehierarchies.ruby.caches.viper',
+    'gem5/components/cachehierarchies/ruby/caches/viper/directory.py')
+PySource('gem5.components.cachehierarchies.ruby.caches.viper',
+    'gem5/components/cachehierarchies/ruby/caches/viper/dma_controller.py')
 PySource('gem5.components.cachehierarchies.ruby.topologies',
     'gem5/components/cachehierarchies/ruby/topologies/__init__.py')
 PySource('gem5.components.cachehierarchies.ruby.topologies',

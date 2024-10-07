@@ -29,9 +29,9 @@ from abc import abstractmethod
 
 from m5.objects import L1Cache_Controller
 
-from .....isas import ISA
-from ....processors.abstract_core import AbstractCore
-from ....processors.cpu_types import CPUTypes
+from gem5.isas import ISA
+from gem5.components.processors.abstract_core import AbstractCore
+from gem5.components.processors.cpu_types import CPUTypes
 
 
 class AbstractL1Cache(L1Cache_Controller):

@@ -103,7 +103,9 @@ Bridge::init()
 {
     // make sure both sides are connected and have the same block size
     if (!cpuSidePort.isConnected() || !memSidePort.isConnected())
-        fatal("Both ports of a bridge must be connected.\n");
+        fatal("Both ports of a bridge must be connected.%s, %s\n",
+                !cpuSidePort.isConnected()?"cpu side port not connected":"",
+                !memSidePort.isConnected()?"mem side port not connected":"");
 
     // notify the request side  of our address ranges
     cpuSidePort.sendRangeChange();

@@ -409,6 +409,7 @@ class MetaSimObject(type):
 
         if isSimObjectOrSequence(value):
             # If RHS is a SimObject, it's an implicit child assignment.
+            # print("aaaaaaaaaaaaaah", value)
             cls._add_cls_child(attr, coerceSimObjectOrVector(value))
             return
 
@@ -857,6 +858,7 @@ class SimObject(metaclass=MetaSimObject):
     # Set attribute (called on foo.attr = value when foo is an
     # instance of class cls).
     def __setattr__(self, attr, value):
+        # print("me here", attr, value)
         # normal processing for private attributes
         if attr.startswith("_"):
             object.__setattr__(self, attr, value)
@@ -1079,7 +1081,14 @@ class SimObject(metaclass=MetaSimObject):
             if issubclass(pdesc.ptype, ptype):
                 match_obj = self._values[pname]
                 if not isproxy(match_obj) and not isNullPointer(match_obj):
-                    all[match_obj] = True
+                    # print("hello", self, pname, match_obj, type(match_obj))
+                    if type(match_obj) is SimObjectVector:
+                        # print("sim object vector!!!")
+                        for simobj in match_obj:
+                            # print(simobj)
+                            all[simobj] = True
+                    else:
+                        all[match_obj] = True
         # Also make sure to sort the keys based on the objects' path to
         # ensure that the order is the same on all hosts
         return sorted(all.keys(), key=lambda o: o.path()), True
@@ -1253,6 +1262,7 @@ class SimObject(metaclass=MetaSimObject):
         if not self._ccObject:
             # Make sure this object is in the configuration hierarchy
             if not self._parent and not isRoot(self):
+                print(self)
                 raise RuntimeError("Attempt to instantiate orphan node")
             # Cycles in the configuration hierarchy are not supported. This
             # will catch the resulting recursion and stop.

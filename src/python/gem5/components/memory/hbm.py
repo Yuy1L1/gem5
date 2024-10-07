@@ -29,6 +29,7 @@
 
 from math import log
 from typing import (
+    List,
     Optional,
     Sequence,
     Tuple,
@@ -171,6 +172,9 @@ class HighBandwidthMemory(ChanneledMemory):
         return [
             (addr_ranges[i], ctrl.port) for i, ctrl in enumerate(self.mem_ctrl)
         ]
+
+    def get_memory_interfaces(self) -> List[DRAMInterface]:
+        return self._dram + self._dram_2
 
 
 def HBM2Stack(
